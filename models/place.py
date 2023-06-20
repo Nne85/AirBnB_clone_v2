@@ -1,83 +1,86 @@
 #!/usr/bin/python3
-"""This is the base model class for AirBnB"""
-from sqlalchemy.ext.declarative import declarative_base
-import uuid
+"""Defines the Place class."""
 import models
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime
+from os import getenv
+from models.base_model import Base
+from models.base_model import BaseModel
+from models.amenity import Amenity
+from models.review import Review
+from sqlalchemy import Column
+from sqlalchemy import Float
+from sqlalchemy import ForeignKey
+from sqlalchemy import Integer
+from sqlalchemy import String
+from sqlalchemy import Table
+from sqlalchemy.orm import relationship
 
 
-Base = declarative_base()
+association_table = Table("place_amenity", Base.metadata,
+                          Column("place_id", String(60),
+                                 ForeignKey("places.id"),
+                                 primary_key=True, nullable=False),
+                          Column("amenity_id", String(60),
+                                 ForeignKey("amenities.id"),
+                                 primary_key=True, nullable=False))
 
 
-class BaseModel:
-    """This class will defines all common attributes/methods
-    for other classes
+class Place(BaseModel, Base):
+    """Represents a Place for a MySQL database.
+
+    Inherits from SQLAlchemy Base and links to the MySQL table places.
+
+    Attributes:
+        __tablename__ (str): The name of the MySQL table to store places.
+        city_id (sqlalchemy String): The place's city id.
+        user_id (sqlalchemy String): The place's user id.
+        name (sqlalchemy String): The name.
+        description (sqlalchemy String): The description.
+        number_rooms (sqlalchemy Integer): The number of rooms.
+        number_bathrooms (sqlalchemy Integer): The number of bathrooms.
+        max_guest (sqlalchemy Integer): The maximum number of guests.
+        price_by_night (sqlalchemy Integer): The price by night.
+        latitude (sqlalchemy Float): The place's latitude.
+        longitude (sqlalchemy Float): The place's longitude.
+        reviews (sqlalchemy relationship): The Place-Review relationship.
+        amenities (sqlalchemy relationship): The Place-Amenity relationship.
+        amenity_ids (list): An id list of all linked amenities.
     """
-    id = Column(String(60), unique=True, nullable=False, primary_key=True)
-    created_at = Column(DateTime, nullable=False, default=(datetime.utcnow()))
-    updated_at = Column(DateTime, nullable=False, default=(datetime.utcnow()))
+    __tablename__ = "places"
+    city_id = Column(String(60), ForeignKey("cities.id"), nullable=False)
+    user_id = Column(String(60), ForeignKey("users.id"), nullable=False)
+    name = Column(String(128), nullable=False)
+    description = Column(String(1024))
+    number_rooms = Column(Integer, default=0)
+    number_bathrooms = Column(Integer, default=0)
+    max_guest = Column(Integer, default=0)
+    price_by_night = Column(Integer, default=0)
+    latitude = Column(Float)
+    longitude = Column(Float)
+    reviews = relationship("Review", backref="place", cascade="delete")
+    amenities = relationship("Amenity", secondary="place_amenity",
+                             viewonly=False)
+    amenity_ids = []
 
-    def __init__(self, *args, **kwargs):
-        """Instantiation of base model class
-        Args:
-            args: it won't be used
-            kwargs: arguments for the constructor of the BaseModel
-        Attributes:
-            id: unique id generated
-            created_at: creation date
-            updated_at: updated date
-        """
-        if kwargs:
-            for key, value in kwargs.items():
-                if key == "created_at" or key == "updated_at":
-                    value = datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%f")
-                if key != "__class__":
-                    setattr(self, key, value)
-            if "id" not in kwargs:
-                self.id = str(uuid.uuid4())
-            if "created_at" not in kwargs:
-                self.created_at = datetime.now()
-            if "updated_at" not in kwargs:
-                self.updated_at = datetime.now()
-        else:
-            self.id = str(uuid.uuid4())
-            self.created_at = self.updated_at = datetime.now()
+    if getenv("HBNB_TYPE_STORAGE", None) != "db":
+        @property
+        def reviews(self):
+            """Get a list of all linked Reviews."""
+            review_list = []
+            for review in list(models.storage.all(Review).values()):
+                if review.place_id == self.id:
+                    review_list.append(review)
+            return review_list
 
-    def __str__(self):
-        """returns a string
-        Return:
-            returns a string of class name, id, and dictionary
-        """
-        return "[{}] ({}) {}".format(
-            type(self).__name__, self.id, self.__dict__)
+        @property
+        def amenities(self):
+            """Get/set linked Amenities."""
+            amenity_list = []
+            for amenity in list(models.storage.all(Amenity).values()):
+                if amenity.id in self.amenity_ids:
+                    amenity_list.append(amenity)
+            return amenity_list
 
-    def __repr__(self):
-        """return a string representaion
-        """
-        return self.__str__()
-
-    def save(self):
-        """updates the public instance attribute updated_at to current
-        """
-        self.updated_at = datetime.now()
-        models.storage.new(self)
-        models.storage.save()
-
-    def to_dict(self):
-        """creates dictionary of the class  and returns
-        Return:
-            returns a dictionary of all the key values in __dict__
-        """
-        my_dict = dict(self.__dict__)
-        my_dict["__class__"] = str(type(self).__name__)
-        my_dict["created_at"] = self.created_at.isoformat()
-        my_dict["updated_at"] = self.updated_at.isoformat()
-        if '_sa_instance_state' in my_dict.keys():
-            del my_dict['_sa_instance_state']
-        return my_dict
-
-    def delete(self):
-        """ delete object
-        """
-        models.storage.delete(self)
+        @amenities.setter
+        def amenities(self, value):
+            if type(value) == Amenity:
+                self.amenity_ids.append(value.id)
