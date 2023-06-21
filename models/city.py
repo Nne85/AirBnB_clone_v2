@@ -18,16 +18,7 @@ class City(BaseModel, Base):
         name (sqlalchemy String): The name of the City.
         state_id (sqlalchemy String): The state id of the City.
     """
-    if models.storage_t == 'db':
-        __tablename__ = "cities"
+    __tablename__ = "cities"
     name = Column(String(128), nullable=False)
     state_id = Column(String(60), ForeignKey("states.id"), nullable=False)
     places = relationship("Place", backref="cities", cascade="delete")
-
-    else:
-        state_id = ""
-        name = ""
-
-    def __init__(self, *args, **kwargs):
-        """initializes city"""
-        super().__init__(*args, **kwargs)
