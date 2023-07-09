@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # Fabfile to distribute an archive to a web server.
-import os.path
+import os
 from fabric.api import env
 from fabric.api import put
 from fabric.api import run
@@ -26,23 +26,26 @@ def do_deploy(archive_path):
         put(archive_path, tmp_path)
 
         # Uncompress the archive to the releases folder
-        run("mkdir -p {}".format(releases_path))
-        run("tar -xzf {} -C {}".format(tmp_path, releases_path))
+        run("sudo mkdir -p {}".format(releases_path))
+        run("sudo tar -xzf {} -C {}".format(tmp_path, releases_path))
+
+        # Delete the styles and images directories if they exist
+        run("sudo rm -rf {}/styles {}/images".format(releases_path, releases_path))
 
         # Move the contents of the web_static folder one level up
-        run("mv {}web_static/* {}".format(releases_path, releases_path))
+        run("sudo mv {}web_static/* {}".format(releases_path, releases_path))
 
         # Remove the now empty web_static folder
-        run("rm -rf {}web_static".format(releases_path))
+        run("sudo rm -rf {}web_static".format(releases_path))
 
         # Delete the archive from the web server
-        run("rm {}".format(tmp_path))
+        run("sudo rm {}".format(tmp_path))
 
         # Delete the existing symbolic link
-        run("rm -rf /data/web_static/current")
+        run("sudo rm -rf /data/web_static/current")
 
         # Create a new symbolic link to the new version
-        run("ln -s {} /data/web_static/current".format(releases_path))
+        run("sudo ln -s {} /data/web_static/current".format(releases_path))
 
         print("New version deployed!")
         return True
