@@ -1,55 +1,52 @@
 #!/usr/bin/python3
 # Fabfile to distribute an archive to a web server.
 import os
-from fabric.api import env
-from fabric.api import put
-from fabric.api import run
+import shlex
+from datetime import datetime
+from fabric.api import *
 
 env.hosts = ["100.25.192.12", "100.25.22.89"]
+env.user = "ubuntu"
+
+
+@runs_once
+def do_pack():
+    """
+    Fabric script that generates a .tgz archive from the contents of the
+    web_static folder of your AirBnB Clone repo.
+    """
+    if not os.path.isdir("versions"):
+        os.mkdir("versions")
+    present_time = strftime("%Y%M%d%H%M%S")
+    output = "versions/web_static_{}.tgz".format(present_time)
+    try:
+        print("Packing web_static to {}".format(output))
+        local("tar -cvzf {} web_static".format(output))
+        archize_size = os.stat(output).st_size
+        print("web_static packed: {} -> {} Bytes".format(output, archize_size))
+    except Exception:
+        output = None
+    return output
 
 
 def do_deploy(archive_path):
-    """
-    Distributes an archive to the web servers.
-    Returns True if all operations have been done correctly, otherwise returns False.
-    """
-    if not os.path.exists(archive_path):
+    """Distributes an archive to your web servers"""
+    if not os.path.isfile(archive_path):
         return False
-
     try:
-        archive_filename = os.path.basename(archive_path)
-        archive_no_extension = archive_filename.split('.')[0]
-        tmp_path = "/tmp/{}".format(archive_filename)
-        releases_path = "/data/web_static/releases/{}/".format(archive_no_extension)
-
-        # Upload the archive to the /tmp/ directory of the web server
-        put(archive_path, tmp_path)
-
-        # Uncompress the archive to the releases folder
-        run("sudo mkdir -p {}".format(releases_path))
-        run("sudo tar -xzf {} -C {}".format(tmp_path, releases_path))
-
-        # Delete the styles and images directories if they exist
-        run("sudo rm -rf {}/styles {}/images".format(releases_path, releases_path))
-
-        # Move the contents of the web_static folder one level up
-        run("sudo mv {}web_static/* {}".format(releases_path, releases_path))
-
-        # Remove the now empty web_static folder
-        run("sudo rm -rf {}web_static".format(releases_path))
-
-        # Delete the archive from the web server
-        run("sudo rm {}".format(tmp_path))
-
-        # Delete the existing symbolic link
-        run("sudo rm -rf /data/web_static/current")
-
-        # Create a new symbolic link to the new version
-        run("sudo ln -s {} /data/web_static/current".format(releases_path))
-
+        filename = archive_path.split("/")[-1]
+        rmv_ext = filename.split(".")[0]
+        path_rmv_ext = "/data/web_static/releases/{}/".format(rmv_ext)
+        symlink = "/data/web_static/current"
+        put(archive_path, "/tmp/")
+        sudo("mkdir -p {}".format(path_rmv_ext))
+        sudo("tar -xzf /tmp/{} -C {}".format(filename, path_rmv_ext))
+        sudo("rm /tmp/{}".format(filename))
+        sudo("mv {}web_static/* {}".format(path_rmv_ext, path_rmv_ext))
+        sudo("rm -rf {}web_static".format(path_rmv_ext))
+        sudo("rm -rf {}".format(symlink))
+        sudo("ln -s {} {}".format(path_rmv_ext, symlink))
         print("New version deployed!")
         return True
-
-    except Exception as e:
-        print("Deployment failed:", str(e))
+    except Exception:
         return False
