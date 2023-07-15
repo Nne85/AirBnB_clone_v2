@@ -1,75 +1,74 @@
 #!/usr/bin/python3
-# Fabfile to create and distribute an archive to a web server.
+"""
+A Fabric script (based on the file 2-do_deploy_web_static.py) that creates
+and distributes an archive to your web servers, using the function deploy:
+
+    Prototype: def deploy():
+    The script should take the following steps:
+    Call the do_pack() function and store the path of the created archive
+    Return False if no archive has been created
+    Call the do_deploy(archive_path) function, using the new path of the new
+    archive
+    Return the return value of do_deploy
+    All remote commands must be executed on both of web your servers
+    (using env.hosts = ['<IP web-01>', 'IP web-02'] variable in your script)
+    You must use this script to deploy it on your servers: xx-web-01 and
+    xx-web-02
+"""
+from fabric.api import *
+from time import strftime
 import os.path
-from datetime import datetime
-from fabric.api import env
-from fabric.api import local
-from fabric.api import put
-from fabric.api import run
-
 env.hosts = ["100.25.192.12", "100.25.22.89"]
+env.user = "ubuntu"
 
 
+@runs_once
 def do_pack():
-    """Create a tar gzipped archive of the directory web_static."""
-    dt = datetime.utcnow()
-    file = "versions/web_static_{}{}{}{}{}{}.tgz".format(dt.year,
-                                                         dt.month,
-                                                         dt.day,
-                                                         dt.hour,
-                                                         dt.minute,
-                                                         dt.second)
-    if os.path.isdir("versions") is False:
-        if local("mkdir -p versions").failed is True:
-            return None
-    if local("tar -cvzf {} web_static".format(file)).failed is True:
-        return None
-    return file
+    """
+    Fabric script that generates a .tgz archive from the contents of the
+    web_static folder of your AirBnB Clone repo.
+    """
+    if not os.path.isdir("versions"):
+        os.mkdir("versions")
+    present_time = strftime("%Y%M%d%H%M%S")
+    output = "versions/web_static_{}.tgz".format(present_time)
+    try:
+        print("Packing web_static to {}".format(output))
+        local("tar -cvzf {} web_static".format(output))
+        archize_size = os.stat(output).st_size
+        print("web_static packed: {} -> {} Bytes".format(output, archize_size))
+    except Exception:
+        output = None
+    return output
 
 
 def do_deploy(archive_path):
-    """Distributes an archive to a web server.
-    Args:
-        archive_path (str): The path of the archive to distribute.
-    Returns:
-        If the file doesn't exist at archive_path or an error occurs - False.
-        Otherwise - True.
-    """
-    if os.path.isfile(archive_path) is False:
+    """Distributes an archive to your web servers"""
+    if not os.path.isfile(archive_path):
         return False
-    file = archive_path.split("/")[-1]
-    name = file.split(".")[0]
-
-    if put(archive_path, "/tmp/{}".format(file)).failed is True:
+    try:
+        filename = archive_path.split("/")[-1]
+        rmv_ext = filename.split(".")[0]
+        path_rmv_ext = "/data/web_static/releases/{}/".format(rmv_ext)
+        symlink = "/data/web_static/current"
+        put(archive_path, "/tmp/")
+        sudo("mkdir -p {}".format(path_rmv_ext))
+        sudo("tar -xzf /tmp/{} -C {}".format(filename, path_rmv_ext))
+        sudo("rm /tmp/{}".format(filename))
+        sudo("mv {}web_static/* {}".format(path_rmv_ext, path_rmv_ext))
+        sudo("rm -rf {}web_static".format(path_rmv_ext))
+        sudo("rm -rf {}".format(symlink))
+        sudo("ln -s {} {}".format(path_rmv_ext, symlink))
+        print("New version deployed!")
+        return True
+    except Exception:
         return False
-    if run("rm -rf /data/web_static/releases/{}/".
-           format(name)).failed is True:
-        return False
-    if run("mkdir -p /data/web_static/releases/{}/".
-           format(name)).failed is True:
-        return False
-    if run("tar -xzf /tmp/{} -C /data/web_static/releases/{}/".
-           format(file, name)).failed is True:
-        return False
-    if run("rm /tmp/{}".format(file)).failed is True:
-        return False
-    if run("mv /data/web_static/releases/{}/web_static/* "
-           "/data/web_static/releases/{}/".format(name, name)).failed is True:
-        return False
-    if run("rm -rf /data/web_static/releases/{}/web_static".
-           format(name)).failed is True:
-        return False
-    if run("rm -rf /data/web_static/current").failed is True:
-        return False
-    if run("ln -s /data/web_static/releases/{}/ /data/web_static/current".
-           format(name)).failed is True:
-        return False
-    return True
 
 
 def deploy():
-    """Create and distribute an archive to a web server."""
-    file = do_pack()
-    if file is None:
+    """creates and distributes an archive to your web servers"""
+    created_archive_path = do_pack()
+    if not created_archive_path:
         return False
-    return do_deploy(file)
+    now_deploy = do_deploy(created_archive_path)
+    return now_deploy
