@@ -18,8 +18,9 @@ def teardown_session(exception):
 @app.route('/states_list', strict_slashes=False)
 def states_list():
     """Displays a HTML page with the list of all State objects."""
-    states = storage.all("State")
-    return render_template('7-states_list.html', states=states)
+    states = storage.all(State).values()
+    states_sorted = sorted(states, key=lambda state: state.name)
+    return render_template('7-states_list.html', states=states_sorted)
 
 
 if __name__ == "__main__":
